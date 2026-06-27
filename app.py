@@ -24,24 +24,18 @@ def init_connection():
 sheet = init_connection()
 
 def load_data():
-    # SOLUTION AU BUG : On utilise get_all_values() pour récupérer du texte pur (strings) 
-    # et ignorer la conversion automatique erronée de gspread
     raw_data = sheet.get_all_values()
     
-    # Si le tableau est vide ou ne contient que la ligne des titres
     if not raw_data or len(raw_data) <= 1:
         return pd.DataFrame(columns=['ID', 'Serveur', 'Date', 'Midi_Debut', 'Midi_Fin', 'Midi_Pause', 'Soir_Debut', 'Soir_Fin', 'Soir_Pause', 'Total_Heures'])
     
     headers = raw_data.pop(0)
     df = pd.DataFrame(raw_data, columns=headers)
     
-    # --- NETTOYAGE STRICT ---
     df['Date'] = df['Date'].astype(str)
     
     if 'Total_Heures' in df.columns:
-        # On remplace explicitement la virgule par un point sur la chaîne de texte
         df['Total_Heures'] = df['Total_Heures'].astype(str).str.replace(',', '.').str.replace(' ', '')
-        # Puis on convertit en décimal réel
         df['Total_Heures'] = pd.to_numeric(df['Total_Heures'], errors='coerce').fillna(0.0).astype(float)
         
     if 'Midi_Pause' in df.columns:
@@ -193,7 +187,7 @@ with onglet_admin:
         st.header("🔒 Accès Restreint")
         mot_de_passe = st.text_input("Mot de passe", type="password")
         if st.button("Se connecter"):
-            if mot_de_passe == "Patron2026": 
+            if mot_de_passe == "Tabasco2024": 
                 st.session_state['admin_connecte'] = True
                 st.rerun()
             else:
@@ -207,7 +201,7 @@ with onglet_admin:
                 st.session_state['admin_connecte'] = False
                 st.rerun()
 
-        st.write("💡 *Modifie les cases ci-dessous et clique sur Enregistrer.*")
+        st.write("💡 *Modifie les heures ou coche la case 'Supprimer' pour effacer une ligne, puis clique sur Enregistrer.*")
         
         col_mois, col_annee = st.columns(2)
         with col_mois:
@@ -223,9 +217,13 @@ with onglet_admin:
             df_filtre = df[masque_date & masque_annee].copy()
 
             if not df_filtre.empty:
+                # Ajout de la colonne de suppression au début du tableau
+                df_filtre.insert(0, '🗑️ Supprimer', False)
+
                 edited_df = st.data_editor(
                     df_filtre,
                     column_config={
+                        "🗑️ Supprimer": st.column_config.CheckboxColumn("Supprimer", help="Coche pour supprimer la ligne"),
                         "ID": st.column_config.NumberColumn("ID", disabled=True),
                         "Serveur": st.column_config.TextColumn("Serveur"),
                         "Date": st.column_config.TextColumn("Date"),
@@ -243,7 +241,18 @@ with onglet_admin:
 
                 if st.button("💾 Enregistrer les modifications", type="primary"):
                     with st.spinner("Mise à jour de Google Sheets..."):
-                        for index, row in edited_df.iterrows():
+                        
+                        # 1. Identifier les lignes à supprimer
+                        ids_a_supprimer = edited_df[edited_df['🗑️ Supprimer'] == True]['ID'].tolist()
+                        
+                        # Exécuter la suppression dans le DataFrame principal
+                        if ids_a_supprimer:
+                            df = df[~df['ID'].isin(ids_a_supprimer)]
+                        
+                        # 2. Identifier les lignes à conserver et à mettre à jour
+                        lignes_a_garder = edited_df[edited_df['🗑️ Supprimer'] == False]
+                        
+                        for index, row in lignes_a_garder.iterrows():
                             t_midi = calculer_duree_service(row['Midi_Debut'], row['Midi_Fin'], row['Midi_Pause'])
                             t_soir = calculer_duree_service(row['Soir_Debut'], row['Soir_Fin'], row['Soir_Pause'])
                             nouveau_total = float(round(t_midi + t_soir, 2))
@@ -257,13 +266,20 @@ with onglet_admin:
                             df.loc[idx_original, 'Soir_Pause'] = int(row['Soir_Pause'])
                             df.loc[idx_original, 'Total_Heures'] = nouveau_total
 
+                        # Sauvegarde finale
                         save_data(df)
-                        st.success("🎉 Modifications enregistrées avec succès !")
+                        
+                        if ids_a_supprimer:
+                            st.success(f"🗑️ {len(ids_a_supprimer)} ligne(s) supprimée(s) avec succès !")
+                        else:
+                            st.success("🎉 Modifications enregistrées avec succès !")
                         st.rerun()
 
                 st.markdown("---")
                 st.subheader("Total cumulé sur le mois (Rapports de Paie)")
-                resume_serveurs = edited_df.groupby('Serveur')['Total_Heures'].sum().reset_index()
+                # On ne calcule les totaux que sur les lignes non cochées pour la suppression
+                lignes_valides = edited_df[edited_df['🗑️ Supprimer'] == False]
+                resume_serveurs = lignes_valides.groupby('Serveur')['Total_Heures'].sum().reset_index()
                 resume_serveurs.columns = ['Serveur', 'Total Mensuel Validé (Heures)']
                 st.dataframe(resume_serveurs, width='stretch', hide_index=True)
             else:
