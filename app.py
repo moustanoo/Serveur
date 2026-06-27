@@ -26,22 +26,24 @@ sheet = init_connection()
 def load_data():
     data = sheet.get_all_records()
     if not data:
-        return pd.DataFrame(columns=['ID', 'Serveur', 'Date', 'Midi_Debut', 'Midi_Fin', 'Midi_Pause', 'Soir_Debut', 'Soir_Fin', 'Soir_Pause', 'Total_Heures'])
-    df = pd.DataFrame(data)
+        df = pd.DataFrame(columns=['ID', 'Serveur', 'Date', 'Midi_Debut', 'Midi_Fin', 'Midi_Pause', 'Soir_Debut', 'Soir_Fin', 'Soir_Pause', 'Total_Heures'])
+    else:
+        df = pd.DataFrame(data)
     
-    # Sécurisation des dates
+    # --- CORRECTION DU BUG DE FORMAT (TYPES STRICTS) ---
     df['Date'] = df['Date'].astype(str)
     
-    # --- CORRECTION DU BUG ICI ---
-    # Nettoyage strict : on remplace les virgules par des points et on force le format en vrai nombre (float)
     if 'Total_Heures' in df.columns:
         df['Total_Heures'] = df['Total_Heures'].astype(str).str.replace(',', '.').str.replace(' ', '')
-        df['Total_Heures'] = pd.to_numeric(df['Total_Heures'], errors='coerce').fillna(0.0)
+        # On force la conversion en "float" (nombre à virgule) pour éviter le crash Pandas
+        df['Total_Heures'] = pd.to_numeric(df['Total_Heures'], errors='coerce').fillna(0.0).astype(float)
         
     if 'Midi_Pause' in df.columns:
+        # On force la conversion en "int" (nombre entier)
         df['Midi_Pause'] = pd.to_numeric(df['Midi_Pause'], errors='coerce').fillna(0).astype(int)
         
     if 'Soir_Pause' in df.columns:
+        # On force la conversion en "int" (nombre entier)
         df['Soir_Pause'] = pd.to_numeric(df['Soir_Pause'], errors='coerce').fillna(0).astype(int)
         
     return df
@@ -154,23 +156,23 @@ with onglet_saisie:
 
                 total_midi = calculer_duree_service(debut_midi, fin_midi, pause_midi)
                 total_soir = calculer_duree_service(debut_soir, fin_soir, pause_soir)
-                total_journee = round(total_midi + total_soir, 2)
+                total_journee = float(round(total_midi + total_soir, 2)) # Forcé en float
 
                 if mask.any():
                     idx = df[mask].index[0]
                     df.at[idx, 'Midi_Debut'] = debut_midi
                     df.at[idx, 'Midi_Fin'] = fin_midi
-                    df.at[idx, 'Midi_Pause'] = pause_midi
+                    df.at[idx, 'Midi_Pause'] = int(pause_midi)
                     df.at[idx, 'Soir_Debut'] = debut_soir
                     df.at[idx, 'Soir_Fin'] = fin_soir
-                    df.at[idx, 'Soir_Pause'] = pause_soir
+                    df.at[idx, 'Soir_Pause'] = int(pause_soir)
                     df.at[idx, 'Total_Heures'] = total_journee
                 else:
                     nouveau_id = 1 if df.empty else pd.to_numeric(df['ID']).max() + 1
                     nouvelle_ligne = {
                         'ID': nouveau_id, 'Serveur': nom_serveur, 'Date': str(date_service),
-                        'Midi_Debut': debut_midi, 'Midi_Fin': fin_midi, 'Midi_Pause': pause_midi,
-                        'Soir_Debut': debut_soir, 'Soir_Fin': fin_soir, 'Soir_Pause': pause_soir,
+                        'Midi_Debut': debut_midi, 'Midi_Fin': fin_midi, 'Midi_Pause': int(pause_midi),
+                        'Soir_Debut': debut_soir, 'Soir_Fin': fin_soir, 'Soir_Pause': int(pause_soir),
                         'Total_Heures': total_journee
                     }
                     df = pd.concat([df, pd.DataFrame([nouvelle_ligne])], ignore_index=True)
@@ -184,7 +186,7 @@ with onglet_admin:
         st.header("🔒 Accès Restreint")
         mot_de_passe = st.text_input("Mot de passe", type="password")
         if st.button("Se connecter"):
-            if mot_de_passe == "Tabasco2024": 
+            if mot_de_passe == "Patron2026": 
                 st.session_state['admin_connecte'] = True
                 st.rerun()
             else:
@@ -237,15 +239,15 @@ with onglet_admin:
                         for index, row in edited_df.iterrows():
                             t_midi = calculer_duree_service(row['Midi_Debut'], row['Midi_Fin'], row['Midi_Pause'])
                             t_soir = calculer_duree_service(row['Soir_Debut'], row['Soir_Fin'], row['Soir_Pause'])
-                            nouveau_total = round(t_midi + t_soir, 2)
+                            nouveau_total = float(round(t_midi + t_soir, 2)) # Forcé en float
                             
                             idx_original = df[df['ID'] == row['ID']].index[0]
                             df.loc[idx_original, 'Midi_Debut'] = row['Midi_Debut']
                             df.loc[idx_original, 'Midi_Fin'] = row['Midi_Fin']
-                            df.loc[idx_original, 'Midi_Pause'] = row['Midi_Pause']
+                            df.loc[idx_original, 'Midi_Pause'] = int(row['Midi_Pause']) # Forcé en int
                             df.loc[idx_original, 'Soir_Debut'] = row['Soir_Debut']
                             df.loc[idx_original, 'Soir_Fin'] = row['Soir_Fin']
-                            df.loc[idx_original, 'Soir_Pause'] = row['Soir_Pause']
+                            df.loc[idx_original, 'Soir_Pause'] = int(row['Soir_Pause']) # Forcé en int
                             df.loc[idx_original, 'Total_Heures'] = nouveau_total
 
                         save_data(df)
