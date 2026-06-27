@@ -24,27 +24,34 @@ def init_connection():
 sheet = init_connection()
 
 def load_data():
-    data = sheet.get_all_records()
-    if not data:
-        df = pd.DataFrame(columns=['ID', 'Serveur', 'Date', 'Midi_Debut', 'Midi_Fin', 'Midi_Pause', 'Soir_Debut', 'Soir_Fin', 'Soir_Pause', 'Total_Heures'])
-    else:
-        df = pd.DataFrame(data)
+    # SOLUTION AU BUG : On utilise get_all_values() pour récupérer du texte pur (strings) 
+    # et ignorer la conversion automatique erronée de gspread
+    raw_data = sheet.get_all_values()
     
-    # --- CORRECTION DU BUG DE FORMAT (TYPES STRICTS) ---
+    # Si le tableau est vide ou ne contient que la ligne des titres
+    if not raw_data or len(raw_data) <= 1:
+        return pd.DataFrame(columns=['ID', 'Serveur', 'Date', 'Midi_Debut', 'Midi_Fin', 'Midi_Pause', 'Soir_Debut', 'Soir_Fin', 'Soir_Pause', 'Total_Heures'])
+    
+    headers = raw_data.pop(0)
+    df = pd.DataFrame(raw_data, columns=headers)
+    
+    # --- NETTOYAGE STRICT ---
     df['Date'] = df['Date'].astype(str)
     
     if 'Total_Heures' in df.columns:
+        # On remplace explicitement la virgule par un point sur la chaîne de texte
         df['Total_Heures'] = df['Total_Heures'].astype(str).str.replace(',', '.').str.replace(' ', '')
-        # On force la conversion en "float" (nombre à virgule) pour éviter le crash Pandas
+        # Puis on convertit en décimal réel
         df['Total_Heures'] = pd.to_numeric(df['Total_Heures'], errors='coerce').fillna(0.0).astype(float)
         
     if 'Midi_Pause' in df.columns:
-        # On force la conversion en "int" (nombre entier)
         df['Midi_Pause'] = pd.to_numeric(df['Midi_Pause'], errors='coerce').fillna(0).astype(int)
         
     if 'Soir_Pause' in df.columns:
-        # On force la conversion en "int" (nombre entier)
         df['Soir_Pause'] = pd.to_numeric(df['Soir_Pause'], errors='coerce').fillna(0).astype(int)
+        
+    if 'ID' in df.columns:
+        df['ID'] = pd.to_numeric(df['ID'], errors='coerce').fillna(0).astype(int)
         
     return df
 
@@ -156,7 +163,7 @@ with onglet_saisie:
 
                 total_midi = calculer_duree_service(debut_midi, fin_midi, pause_midi)
                 total_soir = calculer_duree_service(debut_soir, fin_soir, pause_soir)
-                total_journee = float(round(total_midi + total_soir, 2)) # Forcé en float
+                total_journee = float(round(total_midi + total_soir, 2))
 
                 if mask.any():
                     idx = df[mask].index[0]
@@ -239,15 +246,15 @@ with onglet_admin:
                         for index, row in edited_df.iterrows():
                             t_midi = calculer_duree_service(row['Midi_Debut'], row['Midi_Fin'], row['Midi_Pause'])
                             t_soir = calculer_duree_service(row['Soir_Debut'], row['Soir_Fin'], row['Soir_Pause'])
-                            nouveau_total = float(round(t_midi + t_soir, 2)) # Forcé en float
+                            nouveau_total = float(round(t_midi + t_soir, 2))
                             
                             idx_original = df[df['ID'] == row['ID']].index[0]
                             df.loc[idx_original, 'Midi_Debut'] = row['Midi_Debut']
                             df.loc[idx_original, 'Midi_Fin'] = row['Midi_Fin']
-                            df.loc[idx_original, 'Midi_Pause'] = int(row['Midi_Pause']) # Forcé en int
+                            df.loc[idx_original, 'Midi_Pause'] = int(row['Midi_Pause'])
                             df.loc[idx_original, 'Soir_Debut'] = row['Soir_Debut']
                             df.loc[idx_original, 'Soir_Fin'] = row['Soir_Fin']
-                            df.loc[idx_original, 'Soir_Pause'] = int(row['Soir_Pause']) # Forcé en int
+                            df.loc[idx_original, 'Soir_Pause'] = int(row['Soir_Pause'])
                             df.loc[idx_original, 'Total_Heures'] = nouveau_total
 
                         save_data(df)
