@@ -80,7 +80,7 @@ def generer_heures_midi():
     heures = []
     for h in range(8, 18):
         heures.extend([f"{h:02d}:00", f"{h:02d}:15", f"{h:02d}:30", f"{h:02d}:45"])
-    heures.append("17:00")
+    heures.append("18:00")
     return heures
 
 def generer_heures_soir():
