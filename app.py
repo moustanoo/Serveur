@@ -94,24 +94,20 @@ heures_midi_options = generer_heures_midi() + ["-"]
 heures_soir_options = generer_heures_soir() + ["-"]
 
 # ==========================================
-# 3. INTERFACE UTILISATEUR ET MÉMOIRE (SESSION STATE)
+# 3. INTERFACE UTILISATEUR ET MÉMOIRE
 # ==========================================
 st.set_page_config(page_title="Gestion des Heures", layout="wide")
 
-# Mémoire pour l'administration
 if 'admin_connecte' not in st.session_state:
     st.session_state['admin_connecte'] = False
 
-# Mémoire pour forcer le nettoyage des cases
-if 'check_midi' not in st.session_state:
-    st.session_state['check_midi'] = False
-if 'check_soir' not in st.session_state:
-    st.session_state['check_soir'] = False
+# NOUVEAU : Le compteur de rafraîchissement
+if 'reset_counter' not in st.session_state:
+    st.session_state['reset_counter'] = 0
 
 def reinitialiser_cases():
-    """Fonction qui décoche automatiquement le midi et le soir"""
-    st.session_state['check_midi'] = False
-    st.session_state['check_soir'] = False
+    """Incrémente le compteur pour forcer la création de nouvelles cases vides"""
+    st.session_state['reset_counter'] += 1
 
 onglet_saisie, onglet_admin = st.tabs(["🕒 Saisir mes heures", "📊 Administration"])
 
@@ -119,21 +115,21 @@ onglet_saisie, onglet_admin = st.tabs(["🕒 Saisir mes heures", "📊 Administr
 with onglet_saisie:
     st.header("Pointage des services")
     
-    # Affichage du message de succès après le rafraîchissement de la page
+    # Affichage du message de succès (s'il existe) puis on l'efface
     if 'message_succes' in st.session_state:
         st.success(st.session_state['message_succes'])
-        del st.session_state['message_succes'] # On l'efface pour ne pas qu'il reste indéfiniment
+        del st.session_state['message_succes'] 
     
     nom_serveur = st.text_input("Nom du serveur", placeholder="Ex: Moustapha")
     
-    # Le on_change déclenche le nettoyage des cases dès qu'une nouvelle date est choisie
+    # Quand on change la date, ça déclenche instantanément la fonction reinitialiser_cases
     date_service = st.date_input("Date du(des) service(s)", format="DD/MM/YYYY", on_change=reinitialiser_cases)
     
     st.write("### Quels services as-tu fait ce jour-là ?")
     
-    # Les cases sont maintenant liées à la mémoire (key) pour pouvoir les contrôler à distance
-    midi_coche = st.checkbox("☀️ Service du Midi (08h - 17h)", key="check_midi")
-    soir_coche = st.checkbox("🌙 Service du Soir (17h - 01h)", key="check_soir")
+    # NOUVEAU : On intègre le compteur dans la "clé" des cases
+    midi_coche = st.checkbox("☀️ Service du Midi (08h - 17h)", key=f"check_midi_{st.session_state['reset_counter']}")
+    soir_coche = st.checkbox("🌙 Service du Soir (17h - 01h)", key=f"check_soir_{st.session_state['reset_counter']}")
 
     debut_midi, fin_midi, pause_midi = "-", "-", 0
     debut_soir, fin_soir, pause_soir = "-", "-", 0
@@ -146,7 +142,7 @@ with onglet_saisie:
         with col_m2:
             fin_midi = st.selectbox("Fin (Midi)", generer_heures_midi(), index=24)
         with col_m3:
-            pause_midi = st.number_input("Pause Midi (min)", min_value=0, max_value=120, value=0, step=5, key="p_midi")
+            pause_midi = st.number_input("Pause Midi (min)", min_value=0, max_value=120, value=0, step=5, key=f"p_midi_{st.session_state['reset_counter']}")
             
     if soir_coche:
         st.markdown("**Horaires du Soir**")
@@ -156,7 +152,7 @@ with onglet_saisie:
         with col_s2:
             fin_soir = st.selectbox("Fin (Soir)", generer_heures_soir(), index=len(generer_heures_soir())-1)
         with col_s3:
-            pause_soir = st.number_input("Pause Soir (min)", min_value=0, max_value=120, value=0, step=5, key="p_soir")
+            pause_soir = st.number_input("Pause Soir (min)", min_value=0, max_value=120, value=0, step=5, key=f"p_soir_{st.session_state['reset_counter']}")
 
     if st.button("Enregistrer mes heures", type="primary"):
         if not nom_serveur:
@@ -201,7 +197,7 @@ with onglet_saisie:
                 
                 save_data(df)
                 
-                # Mémorisation du succès, nettoyage de l'interface et redémarrage automatique
+                # On stocke le message de réussite, on augmente le compteur, et on redémarre la page
                 st.session_state['message_succes'] = f"✅ Horaires enregistrés avec succès ! Total : {total_journee} h"
                 reinitialiser_cases()
                 st.rerun()
