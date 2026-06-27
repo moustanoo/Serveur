@@ -28,13 +28,26 @@ def load_data():
     if not data:
         return pd.DataFrame(columns=['ID', 'Serveur', 'Date', 'Midi_Debut', 'Midi_Fin', 'Midi_Pause', 'Soir_Debut', 'Soir_Fin', 'Soir_Pause', 'Total_Heures'])
     df = pd.DataFrame(data)
-    # S'assurer que les dates sont des chaînes de caractères pour les filtres
+    
+    # Sécurisation des dates
     df['Date'] = df['Date'].astype(str)
+    
+    # --- CORRECTION DU BUG ICI ---
+    # Nettoyage strict : on remplace les virgules par des points et on force le format en vrai nombre (float)
+    if 'Total_Heures' in df.columns:
+        df['Total_Heures'] = df['Total_Heures'].astype(str).str.replace(',', '.').str.replace(' ', '')
+        df['Total_Heures'] = pd.to_numeric(df['Total_Heures'], errors='coerce').fillna(0.0)
+        
+    if 'Midi_Pause' in df.columns:
+        df['Midi_Pause'] = pd.to_numeric(df['Midi_Pause'], errors='coerce').fillna(0).astype(int)
+        
+    if 'Soir_Pause' in df.columns:
+        df['Soir_Pause'] = pd.to_numeric(df['Soir_Pause'], errors='coerce').fillna(0).astype(int)
+        
     return df
 
 def save_data(df):
     sheet.clear()
-    # Transforme le dataframe en liste de listes pour Google Sheets
     sheet.update(values=[df.columns.values.tolist()] + df.values.tolist())
 
 # ==========================================
@@ -130,7 +143,6 @@ with onglet_saisie:
             with st.spinner("Sauvegarde dans Google Sheets..."):
                 df = load_data()
                 
-                # Chercher si une ligne existe déjà
                 mask = (df['Serveur'] == nom_serveur) & (df['Date'] == str(date_service))
                 
                 if mask.any():
@@ -197,8 +209,6 @@ with onglet_admin:
         df = load_data()
         
         if not df.empty:
-            # Conversion des dates pour le filtre (format AAAA-MM-JJ attendu)
-            # Extrait le mois et l'année de la colonne Date (YYYY-MM-DD)
             masque_date = df['Date'].str[5:7] == f"{mois_selectionne:02d}"
             masque_annee = df['Date'].str[0:4] == str(annee_selectionnee)
             df_filtre = df[masque_date & masque_annee].copy()
@@ -224,7 +234,6 @@ with onglet_admin:
 
                 if st.button("💾 Enregistrer les modifications", type="primary"):
                     with st.spinner("Mise à jour de Google Sheets..."):
-                        # Parcourir les modifications et mettre à jour le df principal
                         for index, row in edited_df.iterrows():
                             t_midi = calculer_duree_service(row['Midi_Debut'], row['Midi_Fin'], row['Midi_Pause'])
                             t_soir = calculer_duree_service(row['Soir_Debut'], row['Soir_Fin'], row['Soir_Pause'])
