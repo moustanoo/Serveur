@@ -94,12 +94,24 @@ heures_midi_options = generer_heures_midi() + ["-"]
 heures_soir_options = generer_heures_soir() + ["-"]
 
 # ==========================================
-# 3. INTERFACE UTILISATEUR
+# 3. INTERFACE UTILISATEUR ET MÉMOIRE (SESSION STATE)
 # ==========================================
 st.set_page_config(page_title="Gestion des Heures", layout="wide")
 
+# Mémoire pour l'administration
 if 'admin_connecte' not in st.session_state:
     st.session_state['admin_connecte'] = False
+
+# Mémoire pour forcer le nettoyage des cases
+if 'check_midi' not in st.session_state:
+    st.session_state['check_midi'] = False
+if 'check_soir' not in st.session_state:
+    st.session_state['check_soir'] = False
+
+def reinitialiser_cases():
+    """Fonction qui décoche automatiquement le midi et le soir"""
+    st.session_state['check_midi'] = False
+    st.session_state['check_soir'] = False
 
 onglet_saisie, onglet_admin = st.tabs(["🕒 Saisir mes heures", "📊 Administration"])
 
@@ -107,12 +119,21 @@ onglet_saisie, onglet_admin = st.tabs(["🕒 Saisir mes heures", "📊 Administr
 with onglet_saisie:
     st.header("Pointage des services")
     
+    # Affichage du message de succès après le rafraîchissement de la page
+    if 'message_succes' in st.session_state:
+        st.success(st.session_state['message_succes'])
+        del st.session_state['message_succes'] # On l'efface pour ne pas qu'il reste indéfiniment
+    
     nom_serveur = st.text_input("Nom du serveur", placeholder="Ex: Moustapha")
-    date_service = st.date_input("Date du(des) service(s)", format="DD/MM/YYYY")
+    
+    # Le on_change déclenche le nettoyage des cases dès qu'une nouvelle date est choisie
+    date_service = st.date_input("Date du(des) service(s)", format="DD/MM/YYYY", on_change=reinitialiser_cases)
     
     st.write("### Quels services as-tu fait ce jour-là ?")
-    midi_coche = st.checkbox("☀️ Service du Midi (08h - 17h)")
-    soir_coche = st.checkbox("🌙 Service du Soir (17h - 01h)")
+    
+    # Les cases sont maintenant liées à la mémoire (key) pour pouvoir les contrôler à distance
+    midi_coche = st.checkbox("☀️ Service du Midi (08h - 17h)", key="check_midi")
+    soir_coche = st.checkbox("🌙 Service du Soir (17h - 01h)", key="check_soir")
 
     debut_midi, fin_midi, pause_midi = "-", "-", 0
     debut_soir, fin_soir, pause_soir = "-", "-", 0
@@ -179,7 +200,11 @@ with onglet_saisie:
                     df = pd.concat([df, pd.DataFrame([nouvelle_ligne])], ignore_index=True)
                 
                 save_data(df)
-                st.success(f"✅ Horaires enregistrés avec succès ! Total : {total_journee} h")
+                
+                # Mémorisation du succès, nettoyage de l'interface et redémarrage automatique
+                st.session_state['message_succes'] = f"✅ Horaires enregistrés avec succès ! Total : {total_journee} h"
+                reinitialiser_cases()
+                st.rerun()
 
 # --- ONGLET 2 : ADMINISTRATION ---
 with onglet_admin:
@@ -217,7 +242,6 @@ with onglet_admin:
             df_filtre = df[masque_date & masque_annee].copy()
 
             if not df_filtre.empty:
-                # Ajout de la colonne de suppression au début du tableau
                 df_filtre.insert(0, '🗑️ Supprimer', False)
 
                 edited_df = st.data_editor(
@@ -242,14 +266,11 @@ with onglet_admin:
                 if st.button("💾 Enregistrer les modifications", type="primary"):
                     with st.spinner("Mise à jour de Google Sheets..."):
                         
-                        # 1. Identifier les lignes à supprimer
                         ids_a_supprimer = edited_df[edited_df['🗑️ Supprimer'] == True]['ID'].tolist()
                         
-                        # Exécuter la suppression dans le DataFrame principal
                         if ids_a_supprimer:
                             df = df[~df['ID'].isin(ids_a_supprimer)]
                         
-                        # 2. Identifier les lignes à conserver et à mettre à jour
                         lignes_a_garder = edited_df[edited_df['🗑️ Supprimer'] == False]
                         
                         for index, row in lignes_a_garder.iterrows():
@@ -266,7 +287,6 @@ with onglet_admin:
                             df.loc[idx_original, 'Soir_Pause'] = int(row['Soir_Pause'])
                             df.loc[idx_original, 'Total_Heures'] = nouveau_total
 
-                        # Sauvegarde finale
                         save_data(df)
                         
                         if ids_a_supprimer:
@@ -277,7 +297,6 @@ with onglet_admin:
 
                 st.markdown("---")
                 st.subheader("Total cumulé sur le mois (Rapports de Paie)")
-                # On ne calcule les totaux que sur les lignes non cochées pour la suppression
                 lignes_valides = edited_df[edited_df['🗑️ Supprimer'] == False]
                 resume_serveurs = lignes_valides.groupby('Serveur')['Total_Heures'].sum().reset_index()
                 resume_serveurs.columns = ['Serveur', 'Total Mensuel Validé (Heures)']
