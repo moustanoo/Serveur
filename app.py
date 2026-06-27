@@ -120,7 +120,7 @@ with onglet_saisie:
         st.success(st.session_state['message_succes'])
         del st.session_state['message_succes'] 
     
-    nom_serveur = st.text_input("Nom du serveur", placeholder="Ex: Moustapha")
+    nom_serveur = st.text_input("Nom du serveur", placeholder="Ex: Amélie")
     
     # Quand on change la date, ça déclenche instantanément la fonction reinitialiser_cases
     date_service = st.date_input("Date du(des) service(s)", format="DD/MM/YYYY", on_change=reinitialiser_cases)
@@ -128,7 +128,7 @@ with onglet_saisie:
     st.write("### Quels services as-tu fait ce jour-là ?")
     
     # NOUVEAU : On intègre le compteur dans la "clé" des cases
-    midi_coche = st.checkbox("☀️ Service du Midi (08h - 17h)", key=f"check_midi_{st.session_state['reset_counter']}")
+    midi_coche = st.checkbox("☀️ Service du Midi (08h - 18h)", key=f"check_midi_{st.session_state['reset_counter']}")
     soir_coche = st.checkbox("🌙 Service du Soir (17h - 01h)", key=f"check_soir_{st.session_state['reset_counter']}")
 
     debut_midi, fin_midi, pause_midi = "-", "-", 0
